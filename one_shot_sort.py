@@ -1,12 +1,12 @@
 from itertools import islice
-from typing import Callable, Tuple, TypeAlias, cast
 from random import randrange
-
-from typing_extensions import reveal_type
+from typing import Callable, NamedTuple, TypeAlias, cast
 
 GameState: TypeAlias = list[int | None]
 
 Strategy: TypeAlias = Callable[[GameState, int, int], bool]
+
+Results = NamedTuple("Results", [("success", bool), ("state", GameState), ("drawn_nums", list[int])])
 
 
 def manual_strategy(state: GameState, drawn_num: int, max_num: int) -> bool:
@@ -43,9 +43,9 @@ def game(
     strategy: Strategy = manual_strategy,
     print_state: bool = False,
     num_generator: Callable[[int], int] = randrange,
-) -> Tuple[bool, GameState, list[int]]:
+) -> Results:
     state: GameState = [None] * num_slots
-    rand_nums = []
+    drawn_nums = []
     strategy_succeeded = True
     while not is_winning_state(state) and strategy_succeeded:
         if print_state:
@@ -53,13 +53,13 @@ def game(
                 print(i, num or "")
 
         rand_num = num_generator(max_num + 1)
-        while rand_num in rand_nums:
+        while rand_num in drawn_nums:
             rand_num = num_generator(max_num + 1)
 
-        rand_nums.append(rand_num)
+        drawn_nums.append(rand_num)
         strategy_succeeded = strategy(state, rand_num, max_num)
 
-    return strategy_succeeded and is_winning_state(state), state, rand_nums
+    return Results(strategy_succeeded and is_winning_state(state), state, drawn_nums)
 
 
 def is_winning_state(state: GameState) -> bool:
@@ -74,10 +74,11 @@ def is_winning_state(state: GameState) -> bool:
     return False
 
 
-def scale_and_round(state: GameState, drawn_num: int, max_num: int) -> bool:
+def scale_and_round(state: GameState, drawn_num: int, max_num: int = 999) -> bool:
     """Strategy that scales the drawn number w.r.t. the number of slots and the maximum.
 
-    "Is probability density uniform? If so, just scale to 1-20 and round to closest empty cell(if possible), I would assume."
+    "Is probability density uniform? If so, just scale to 1-20 and round to
+    closest empty cell(if possible), I would assume."
 
     From https://www.reddit.com/r/compsci/comments/1354n5h/comment/jii1xtu/?utm_source=share&utm_medium=web2x&context=3
     """
@@ -93,7 +94,7 @@ def scale_and_round(state: GameState, drawn_num: int, max_num: int) -> bool:
     return False
 
 
-def recursive_strategy(state: GameState, drawn_num: int, max_num: int) -> bool:
+def recursive_strategy(state: GameState, drawn_num: int, max_num: int = 999) -> bool:  # NOSONAR
     """Not actually a recursive algorithm just based off a recursive idea.
 
     The first number that's drawn should be placed in a position proportional to its value so for
@@ -138,10 +139,10 @@ def recursive_strategy(state: GameState, drawn_num: int, max_num: int) -> bool:
     if upper_slot_bound == 0 or lower_slot_bound == num_slots - 1:
         return False
 
-    try:
+    if lower_slot_bound == 0:
+        lower_num: int | None = 0
+    else:
         lower_num = state[lower_slot_bound - 1]
-    except IndexError:
-        lower_num = 0
 
     try:
         upper_num = state[upper_slot_bound + 1]
@@ -163,6 +164,12 @@ def recursive_strategy(state: GameState, drawn_num: int, max_num: int) -> bool:
     state[slot] = drawn_num
 
     return True
+
+
+def list_to_number_generator(nums: list[int]) -> Callable[[int], int]:
+    """Returns a function that returns the next number in the list."""
+    iter_ = iter(nums)
+    return lambda _: next(iter_)
 
 
 if __name__ == "__main__":
